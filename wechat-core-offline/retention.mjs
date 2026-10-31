@@ -15,16 +15,16 @@ export function enqueue(state,actor,event,privateReplyContext,now){requireOwner(
 export function eventForDelivery(state,actor,eventId,now){requireOwner(state,actor);purge(state,now);const r=state.records[eventId];if(!r?.event)throw new Error('Event expired or unknown');return structuredClone(r.event);}
 export function enqueueMedia(state,actor,event,privateReplyContext,privateMediaContext,now){requireOwner(state,actor);purge(state,now);if(!event||!idOk(event.eventId)||event.name!=='weixin.owner_media'||!event.data||Object.keys(event.data).sort().join(',')!=='conversation_id,file_name,media_kind,message_id,simulation'||event.data.conversation_id!=='weixin-self'||event.data.simulation!==false||!['image','file'].includes(event.data.media_kind)||typeof event.data.file_name!=='string'||!event.data.file_name||event.data.file_name.length>160||!idOk(event.data.message_id)||!privateReplyContext?.to_user_id||!privateReplyContext?.context_token||!privateMediaContext||privateMediaContext.mediaKind!==event.data.media_kind)throw new Error('Invalid media event');if(Object.hasOwn(state.records,event.eventId))return false;if(Object.values(state.records).filter(r=>r.event).length>=128||Object.keys(state.records).length>=4096)throw new Error('Queue limit reached');state.records[event.eventId]={event:structuredClone(event),privateReplyContext:structuredClone(privateReplyContext),privateMediaContext:structuredClone(privateMediaContext),textUntil:now+TEXT_TTL,dedupeUntil:now+DEDUPE_TTL,sendState:null};return true;}
 const digest=x=>createHash('sha256').update(x,'utf8').digest('hex');
-export function beginReply(state,actor,eventId,text,idempotencyKey,now){
+export function beginReply(state,actor,eventId,text,idempotencyKey,now,{syncPartId}={}){
  requireOwner(state,actor);purge(state,now);const r=state.records[eventId];
  if(!r?.event||!r.privateReplyContext)throw new Error('Unknown or expired event');
- if(!idOk(idempotencyKey)||typeof text!=='string'||!text.length||text.length>2000)throw new Error('Invalid reply');
+ if(!idOk(idempotencyKey)||typeof text!=='string'||!text.length||text.length>2000||!(syncPartId===undefined||/^[a-f0-9]{64}$/.test(syncPartId)))throw new Error('Invalid reply');
  // A legacy attempt has no payload digest: never reinterpret its original key, and
  // when its outcome is uncertain disallow new keys because equivalence is unknowable.
  if(r.sendState && (r.idempotencyKey===idempotencyKey || r.sendState!=='sent'))throw new Error('Legacy attempt cannot be retried');
  const key=digest(idempotencyKey),hash=digest(text);r.replies ||= Object.create(null);
- if(Object.hasOwn(r.replies,key)){const prior=r.replies[key];if(prior.hash!==hash)throw new Error('Idempotency key conflict');return {state:prior.state==='sent'?'sent':'uncertain'};}
- if(Object.values(r.replies).some(x=>x.hash===hash))throw new Error('Reply already attempted under another key');
+ if(Object.hasOwn(r.replies,key)){const prior=r.replies[key];if(prior.hash!==hash||(syncPartId&&prior.syncPartId!==syncPartId))throw new Error('Idempotency key conflict');return {state:prior.state==='sent'?'sent':'uncertain'};}
+ if(Object.values(r.replies).some(x=>x.hash===hash&&(!syncPartId||!x.syncPartId||x.syncPartId===syncPartId)))throw new Error('Reply already attempted under another key');
  // Match the public Tencent client's prefix:timestamp-eight-hex shape. The
  // upstream protocol does not publish a complete client_id length limit.
  // Persist before sending; never regenerate for an existing attempt.
@@ -33,7 +33,7 @@ export function beginReply(state,actor,eventId,text,idempotencyKey,now){
  if(!clientId)throw new Error('Reply ID unavailable');
  // Preserve every newly attempted reply until the original event expires.
  // The bridge applies a total encrypted-state admission bound before commit.
- r.replies[key]={hash,state:'uncertain',attemptedAt:now,clientId,text};
+ r.replies[key]={hash,state:'uncertain',attemptedAt:now,clientId,text,...(syncPartId?{syncPartId}:{})};
  return {to_user_id:r.privateReplyContext.to_user_id,context_token:r.privateReplyContext.context_token,text,clientId};
 }
 export function markSent(state,actor,eventId,idempotencyKey,now){

@@ -1,10 +1,14 @@
 {
   "name": "wechat-mcp-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
-  "engines": {"node": ">=24"},
-  "scripts": {"test": "node --test *.test.mjs ../wechat-live-stage/*.test.mjs"},
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test *.test.mjs ../wechat-live-stage/*.test.mjs"
+  },
   "dependencies": {
     "@modelcontextprotocol/node": "2.1.2",
     "@modelcontextprotocol/server": "2.4.0",
