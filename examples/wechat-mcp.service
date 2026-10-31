@@ -1,0 +1,17 @@
+[Unit]
+Description=Single-owner WeChat MCP bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/wechat-mcp/bridge.env
+WorkingDirectory=%h/src/wechat-mcp/wechat-core-offline
+ExecStart=/usr/bin/node %h/src/wechat-mcp/wechat-core-offline/main-live.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

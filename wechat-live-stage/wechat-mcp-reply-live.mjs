@@ -1,0 +1,9 @@
+import {replyOnce} from '../wechat-core-offline/transport-live.mjs';
+export function registerWechatReplyTool(m,{z,owner,bridge,send=replyOnce}){
+ if(!m?.registerTool||!z||typeof owner!=='string'||!owner||typeof send!=='function')throw new Error('Invalid reply tool');
+ const inputSchema=z.object({eventId:z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),text:z.string().min(1).max(2000),idempotencyKey:z.string().regex(/^[A-Za-z0-9_-]{1,160}$/)}).strict();
+ m.registerTool('send_wechat_reply',{description:'Send a reply to the original session for an accepted owner text event. Use a unique idempotency key for each distinct reply; never retry an uncertain send with any key.',inputSchema,annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:true}},async({eventId,text,idempotencyKey})=>{
+  const active=typeof bridge==='function'?bridge():bridge;if(!active||active.owner!==owner||active.state?.phase!=='armed')return {content:[{type:'text',text:'WeChat is not ready.'}],isError:true};
+  try{const result=await send({bridge:active,actor:owner,eventId,text,idempotencyKey});if(result?.state==='expired')return {content:[{type:'text',text:JSON.stringify({state:'expired',instruction:'Message expired before sending.'})}],isError:true};if(result?.state==='sent')return {content:[{type:'text',text:JSON.stringify({state:'sent'})}]};return {content:[{type:'text',text:JSON.stringify({state:'uncertain',instruction:'Do not automatically retry this send.'})}],isError:true};}catch(e){if(e?.code==='reply_capacity')return {content:[{type:'text',text:'Reply was not sent: retained bridge data reached its storage capacity. No network request was made.'}],isError:true};return {content:[{type:'text',text:'Reply was not sent: the event is unavailable, the key conflicts, or this reply was already attempted.'}],isError:true};}
+ });
+}
