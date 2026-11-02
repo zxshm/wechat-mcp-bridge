@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test *.test.mjs ../wechat-live-stage/*.test.mjs"
+    "test": "node --require ./test-no-network.cjs --test *.test.mjs ../wechat-live-stage/*.test.mjs ../tunnel-safe-log/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "2.1.2",

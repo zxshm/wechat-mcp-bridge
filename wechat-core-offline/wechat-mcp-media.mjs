@@ -1,10 +1,36 @@
+import {createHash} from 'node:crypto';
+import {replyOnce} from './transport-live.mjs';
 import {MediaTransfers} from './media-transfer.mjs';
 import {contextDiagnostics} from './context-diagnostics.mjs';
-import {downloadMedia,uploadAndSendMedia,MAX_MEDIA_BYTES} from './media-codec.mjs';
+import {downloadMedia,uploadAndSendMedia,validateImage,MAX_MEDIA_BYTES} from './media-codec.mjs';
 
-export function createWechatMediaTools({z,owner,bridge,download=downloadMedia,upload=uploadAndSendMedia,clock=Date.now}){
+export function createWechatMediaTools({z,owner,bridge,download=downloadMedia,upload=uploadAndSendMedia,notify=replyOnce,validate=validateImage,clock=Date.now,schedule=setTimeout,cancel=clearTimeout}){
  const active=()=>{const b=typeof bridge==='function'?bridge():bridge;if(!b||b.owner!==owner||b.state?.phase!=='armed')throw new Error('WeChat unavailable');return b;};
- const transfers=new MediaTransfers({owner,clock,readIncoming:async(actor,eventId)=>{const {media,expiresAt}=await active().mediaContext(actor,eventId,clock);const value=await download(media);if(clock()>=expiresAt){value.bytes.fill(0);throw new Error('Media unavailable')}return {...value,expiresAt};},checkTarget:async(actor,eventId)=>{const {expiresAt}=await active().readEvent(actor,eventId,clock);return {expiresAt};},sendMedia:async(actor,args)=>{const b=active(),draft=await b.mediaReplyDraft(actor,args,clock);if(draft.state)return {state:draft.state};if(clock()>=draft.expiresAt)return {state:'uncertain'};let contextAttempt;try{contextAttempt=contextDiagnostics.begin(b.state?.queue?.records?.[args.eventId],'media',clock())}catch{}const contextDone=category=>{try{contextDiagnostics.complete(contextAttempt,category,clock())}catch{}};try{await upload({bytes:args.bytes,kind:args.kind,fileName:args.fileName,sessionToken:b.state.sessionToken,toUserId:draft.to_user_id,contextToken:draft.context_token,clientId:draft.clientId,deadline:draft.expiresAt,clock});contextDone('upstream_accepted');await b.replySent(actor,args.eventId,args.idempotencyKey,clock());return {state:'sent'};}catch(e){contextDone(e?.code==='upstream_media_rejected'?'upstream_other':'local_unknown');if(e?.code==='upstream_media_rejected'&&typeof b.replyRejected==='function'){try{await b.replyRejected(actor,args.eventId,args.idempotencyKey,clock());}catch{}}return {state:'uncertain'}}}});
+ const transfers=new MediaTransfers({owner,clock,schedule,cancel,validate,
+  readIncoming:async(actor,eventId)=>{const {media,expiresAt}=await active().mediaContext(actor,eventId,clock);const value=await download(media);if(clock()>=expiresAt){value.bytes.fill(0);throw new Error('Media unavailable')}return {...value,expiresAt};},
+  checkTarget:async(actor,eventId)=>{const {expiresAt}=await active().readEvent(actor,eventId,clock);return {expiresAt};},
+  waitForNewContext:async(actor,{eventId,idempotencyKey})=>{const b=active();if(typeof b.resolveUnattemptedMediaTarget!=='function')return false;return !!(await b.resolveUnattemptedMediaTarget(actor,eventId,idempotencyKey,clock));},
+  sendMedia:async(actor,args)=>{
+   const b=active();let targetId=args.eventId,draft;
+   try{
+    try{draft=await b.mediaReplyDraft(actor,{...args,eventId:targetId},clock);}
+    catch(e){if(e?.code!=='stale_context'||typeof b.resolveUnattemptedMediaTarget!=='function')throw e;const target=await b.resolveUnattemptedMediaTarget(actor,args.eventId,args.idempotencyKey,clock,{requireChangedContext:false});if(!target)throw e;targetId=target.eventId;draft=await b.mediaReplyDraft(actor,{...args,eventId:targetId},clock);}
+   }catch(e){
+    if(e?.code==='context_notice_requires_text'){
+     const noticeKey='media-notice-v1-'+createHash('sha256').update(JSON.stringify([targetId,args.idempotencyKey])).digest('hex');let noticeState='not_started';
+     try{const n=await notify({bridge:b,actor,eventId:targetId,text:'媒体仅在暂存有效期内续发，过期需重新提交。',idempotencyKey:noticeKey,now:clock(),clock});noticeState=n?.state==='sent'?'upstream_accepted':n?.state==='uncertain'?'uncertain':'not_started';}catch{noticeState='uncertain';}
+     throw Object.assign(new Error('Media waits for a new owner context'),{code:'context_budget_exhausted',blockedEventId:targetId,noticeState});
+    }
+    if(e?.code==='context_budget_exhausted')throw Object.assign(e,{blockedEventId:targetId});
+    throw e;
+   }
+   if(draft.state)return {state:draft.state};const deadline=Math.min(draft.expiresAt,args.expiresAt);
+   if(clock()>=deadline){await b.discardUnstartedReply(actor,targetId,args.idempotencyKey,draft.clientId);throw Object.assign(new Error('No upload started'),{code:'pre_execution_failure'});}
+   let contextAttempt;try{contextAttempt=contextDiagnostics.begin(b.state?.queue?.records?.[targetId],'media',clock())}catch{}const contextDone=category=>{try{contextDiagnostics.complete(contextAttempt,category,clock())}catch{}};
+   try{await upload({bytes:args.bytes,kind:args.kind,fileName:args.fileName,sessionToken:b.state.sessionToken,toUserId:draft.to_user_id,contextToken:draft.context_token,clientId:draft.clientId,deadline,clock});contextDone('upstream_accepted');await b.replySent(actor,targetId,args.idempotencyKey,clock());return {state:'sent'};}
+   catch(e){contextDone(e?.code==='upstream_media_rejected'?'upstream_other':'local_unknown');if(e?.code==='upstream_media_rejected'&&typeof b.replyRejected==='function'){try{await b.replyRejected(actor,targetId,args.idempotencyKey,clock());}catch{}}return {state:'uncertain'};}
+  }
+ });
  const id=z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),uploadId=z.string().regex(/^[a-f0-9]{64}$/),hash=z.string().regex(/^[a-f0-9]{64}$/);
  const result=x=>({content:[{type:'text',text:JSON.stringify(x)}]});const failed=()=>({content:[{type:'text',text:'Media unavailable, expired, or invalid.'}],isError:true});
  function register(m){
