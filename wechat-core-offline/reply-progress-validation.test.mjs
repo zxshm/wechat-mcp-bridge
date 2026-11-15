@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as z from 'zod/v4';
-import {validateWatchPurpose} from '../wechat-core-offline/reply-watchdog.mjs';
-import {registerWechatReplyTool} from './wechat-mcp-reply-live.mjs';
+import {validateWatchPurpose} from './reply-watchdog.mjs';
+import {registerWechatReplyTool} from '../wechat-live-stage/wechat-mcp-reply-live.mjs';
 
 const now = 1_700_000_000_000;
 const expiresAt = now + 86_400_000;
