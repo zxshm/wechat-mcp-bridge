@@ -8,7 +8,7 @@ export function createMinihomeSourceLedger({file,roomId}){
  return {
   register({server,z,ownerAuthenticated,bridge,actor,inspectSubmission,inspectDirect}){
    if(ownerAuthenticated!==true||!server||typeof server.registerTool!=='function'||!z)throw Error('source_ledger_auth_required');
-   registerSourceWindowTools(server,{z,store,namePrefix:'minihome_',combinedPrepare:!!bridge,storageNotice:'本工具使用 Minihome 独立新账本，仅与本微信连接的其他来源工具共用；不包含旧 Windows 账本或其他发送路径的记录。不得借此重试旧消息、未知结果或被拒绝操作。'});
+   registerSourceWindowTools(server,{z,store,namePrefix:'minihome_',combinedPrepare:!!bridge,storageNotice:'本工具使用中继端的独立账本，仅与当前微信连接的其他来源工具共用。其他账本或发送路径的记录需要单独核对。不得借此重试旧消息、未知结果或被拒绝操作。'});
    if(bridge){
     registerCombinedPreparation(server,{z,store,bridge,actor,inspectSubmission,inspectDirect});
     // 保持既有参数和首次资格语义，旧模板兼容；新模板必须核对完整合并证据。

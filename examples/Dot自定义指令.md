@@ -1,4 +1,4 @@
-# Dot 自定义指令与固定同步程序
+# dot 自定义指令与固定同步程序
 
 先配置自己的聊天、连接、作者和实际任务。所有值从当前原聊天与任务的真实读取结果取得，任务版本变化后核查职责并更新配置。任务列表按实际存在的写者填写，长度可变。
 
@@ -11,7 +11,7 @@
   roomId: '填写原聊天 room_id',
   linkId: '填写当前微信 MCP link_id',
   ownerAuthorId: '填写本人 author_id',
-  assistantAuthorId: '填写小弟 author_id',
+  assistantAuthorId: '填写 dot author_id',
   writers: [
     ['填写当前接收任务 ID', true, '填写回读得到的 contextVersion'],
     ['填写已停用旧监听 ID', false, '填写回读得到的 contextVersion']
@@ -29,9 +29,9 @@
 >
 > 配置中的聊天、作者、微信连接及任务职责保持一致。程序核对真实来源、本人事件、固定时间窗、历史、唯一预占和回执。执行开始后保存返回上下文及分段计时，已有未知或拒绝项沿原身份查询。
 >
-> 微信接收任务负责微信新事件。核验本人来信后，在原聊天显示“微信·你：”原文，生成真实回复，以 owner-reply-v1-<原eventId> 为固定键首次调用 send_wechat_reply 并等待最终结果，再显示“微信·小弟：”及真实状态。查询未匹配记录的 unknown 按覆盖范围理解，首次发送是否已经发生以实际执行记录判断。微信镜像与已发送回复保持原方向记录，避免再次触发客户端同步。
+> 微信接收任务负责微信新事件。核验本人来信后，在原聊天显示“微信·你：”原文，生成真实回复，以 owner-reply-v1-<原eventId> 为固定键首次调用 send_wechat_reply 并等待最终结果，再显示“微信·dot：”及真实状态。查询未匹配记录的 unknown 按覆盖范围理解，首次发送是否已经发生以实际执行记录判断。微信镜像与已发送回复保持原方向记录，避免再次触发客户端同步。
 >
-> 微信入站普通文件优先调用 prepare_wechat_file_download，或者读取首块中的 download 信息，在云端以 Authorization Bearer 请求 HTTPS 原始二进制并核对完整大小与 SHA-256，再按客户端官方附件流程交付。下载支持 Range 续传，凭证仅用于请求内存。 兼容首块调用显式传入 offset=0、expectedSha256=null。完整文件交给当前对话模型处理；附件超限的音频可在云端按时间无损分段，再将各自可播放的片段按顺序交付模型。旧分块入口仍可用于读取，入站文件按 Linux 可用磁盘、并发及期限准入。
+> 微信入站普通文件优先调用 prepare_wechat_file_download，或者读取首块中的 download 信息，在云端以 Authorization Bearer 请求 HTTPS 原始二进制并核对完整大小与 SHA-256，再按客户端官方附件流程交付。下载支持 Range 续传，凭证仅用于请求内存。 兼容首块调用显式传入 offset=0、expectedSha256=null。完整文件交给当前对话模型处理；附件超限的音频可在云端按时间无损分段，再将各自可播放的片段按顺序交付模型。旧分块入口仍可用于读取，入站文件按中继端可用磁盘、并发及期限准入。
 >
 > 图片和文件走媒体工具。云端生成的大文件取得原始字节及 SHA-256 后，begin_large_wechat_file_upload 创建上传，在可执行 HTTPS 的环境中使用原始二进制上传及续传，finish 完整校验，再 send_large_wechat_file_upload 首次发送。具体附件来源、原会话和结果保持关联。
 
@@ -153,7 +153,7 @@ async function syncPair(tools, input) {
 
   if ((input.roomId !== undefined && input.roomId !== roomId) ||
       (input.linkId !== undefined && input.linkId !== linkId))
-    return fail('scope', '仅允许原小弟与原微信连接');
+    return fail('scope', '仅允许已配置的 dot 对话与微信连接');
   if (![questionId, answerId].every(x => typeof x === 'string' && x) ||
       [eventId, conversationCursor].some(x => x != null && (typeof x !== 'string' || !x)))
     return fail('input', '必要身份字段缺失');

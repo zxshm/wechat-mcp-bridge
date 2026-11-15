@@ -46,9 +46,9 @@ export function createLargeMediaIntegration({z,owner,bridge,safeFilename,cdnUplo
     }
   };
   function register(m) {
-    const entries=[['begin_large_wechat_file_upload','begin',beginSchema,'为原小弟的新真实附件创建 HTTPS 二进制上传，返回独立短期凭证、uploadEndpoint、partBytes 和操作路径。核实原文件身份、大小和 SHA-256；在能访问原字节且能执行 HTTPS PUT 的环境中，按返回大小切段、逐段计算 SHA-256 并上传原始二进制，再 finish。不得打印凭证，不跟随重定向。此工具不上传内容、不发送微信；缺少文件读取或 HTTP 上传能力时如实报告，不假称上传完成。'],
+    const entries=[['begin_large_wechat_file_upload','begin',beginSchema,'为原 dot 对话的新真实附件创建 HTTPS 二进制上传，返回独立短期凭证、uploadEndpoint、partBytes 和操作路径。核实原文件身份、大小和 SHA-256；在能访问原字节且能执行 HTTPS PUT 的环境中，按返回大小切段、逐段计算 SHA-256 并上传原始二进制，再 finish。不得打印凭证，不跟随重定向。此工具不上传内容、不发送微信；缺少文件读取或 HTTP 上传能力时如实报告，不假称上传完成。'],
       ['get_large_wechat_file_status','status',statusSchema,'只读查询一个已准备大文件的完整校验及发送回执，不返回凭证。'],
-      ['send_large_wechat_file_upload','send',sendSchema,'把原小弟已核实的新附件首次发送到绑定的本人微信，复用原桥发送锁和账本。仅上传完整且摘要一致后执行；结果未知不得重试或换身份。']];
+      ['send_large_wechat_file_upload','send',sendSchema,'把原 dot 对话已核实的新附件首次发送到绑定的本人微信，复用原桥发送锁和账本。仅上传完整且摘要一致后执行；结果未知不得重试或换身份。']];
     for(const [name,op,inputSchema,description] of entries)m.registerTool(name,{description,inputSchema,annotations:{readOnlyHint:op==='status',destructiveHint:false,openWorldHint:op==='send'}},async args=>{
       try{return {content:[{type:'text',text:JSON.stringify(await operations[op](args))}]};}
       catch{return {content:[{type:'text',text:'大文件操作未确认；查询原上传状态，不重试未知发送。'}],isError:true};}

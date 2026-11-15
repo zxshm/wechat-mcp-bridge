@@ -97,7 +97,7 @@ export default async function syncPair(tools, input) {
 
   if ((input.roomId !== undefined && input.roomId !== roomId) ||
       (input.linkId !== undefined && input.linkId !== linkId))
-    return fail('scope', '仅允许原小弟与原微信连接');
+    return fail('scope', '仅允许已配置的 dot 对话与微信连接');
   if (![questionId, answerId].every(x => typeof x === 'string' && x) ||
       [eventId, conversationCursor].some(x => x != null && (typeof x !== 'string' || !x)))
     return fail('input', '必要身份字段缺失');
