@@ -1,3 +1,4 @@
+import {acquireBridgeLock} from '../wechat-live-stage/wechat-single-writer.mjs';
 import {createHash,createDecipheriv,randomBytes,timingSafeEqual} from 'node:crypto';
 import {createReadStream,createWriteStream,constants} from 'node:fs';
 import {mkdir,open,readFile,readdir,rename,rm,stat,lstat,realpath,statfs,writeFile} from 'node:fs/promises';
@@ -21,8 +22,8 @@ async function atomicJson(file,value){
 
 // 文件字节保存在私有磁盘，大小按剩余空间准入，读取时只分配当前块。
 export class IncomingFileStore {
-  constructor({root,resolveUrl,parseKey,safeFilename,origin,fetcher=fetch,clock=Date.now,headroom=256*1024*1024,maxSessions=8}){
-    this.root=resolve(root);Object.assign(this,{resolveUrl,parseKey,safeFilename,origin,fetcher,clock,headroom,maxSessions});
+  constructor({root,resolveUrl,parseKey,safeFilename,origin,fetcher=fetch,clock=Date.now,headroom=256*1024*1024,maxSessions=8,acquireLock=acquireBridgeLock}){
+    this.root=resolve(root);Object.assign(this,{resolveUrl,parseKey,safeFilename,origin,fetcher,clock,headroom,maxSessions,acquireLock});
     this.loading=new Map();this.grants=new Map();this.controllers=new Set();
   }
   async initialize(){
@@ -36,22 +37,35 @@ export class IncomingFileStore {
     await this.initialize();
     for(const id of await readdir(this.root)){
       if(!ID.test(id)||this.loading.has(id))continue;
-      const directory=join(this.root,id),info=await lstat(directory);
-      if(!info.isDirectory()||info.isSymbolicLink())throw failure('incoming_media_storage_unavailable');
-      let expired;
-      try{expired=(await json(join(directory,'ready.json'))).expiresAt<=this.clock();}
-      catch(error){if(error.code!=='ENOENT')throw error;expired=info.mtimeMs+1800000<=this.clock();}
-      // id 经过固定十六进制格式校验，目录始终位于初始化确认的私有根目录内。
-      if(expired){await rm(directory,{recursive:true});this.grants.delete(id);}
+      let release;
+      try{release=await this.acquireLock(this.lockPath(id));}catch{continue;}
+      try{
+        const directory=join(this.root,id);let info;
+        try{info=await lstat(directory);}catch(error){if(error.code==='ENOENT')continue;throw error;}
+        if(!info.isDirectory()||info.isSymbolicLink())throw failure('incoming_media_storage_unavailable');
+        let expired;
+        try{expired=(await json(join(directory,'ready.json'))).expiresAt<=this.clock();}
+        catch(error){if(error.code!=='ENOENT')throw error;expired=info.mtimeMs+1800000<=this.clock();}
+        // 校验后的目录在私有根目录内，跨进程锁保护下载与到期清理。
+        if(expired){await rm(directory,{recursive:true});this.grants.delete(id);}
+      }finally{await release();}
     }
   }
+  lockPath(id){return join(this.root,'incoming-slot-'+(parseInt(id.slice(0,2),16)%16));}
+
   async prepare({eventId,media,expiresAt}){
     if(this.closed||media?.mediaKind!=='file'||typeof eventId!=='string'||!Number.isSafeInteger(expiresAt)||expiresAt<=this.clock())
       throw failure('incoming_media_expired');
     const id=hash(eventId);
     if(this.loading.has(id))return this.loading.get(id);
     if(this.loading.size>=this.maxSessions)throw failure('incoming_media_capacity');
-    const operation=this.download({id,eventId,media,expiresAt}).finally(()=>this.loading.delete(id));
+    const operation=(async()=>{
+      await this.initialize();let release;
+      try{release=await this.acquireLock(this.lockPath(id));}
+      catch{throw failure('incoming_media_busy');}
+      try{return await this.download({id,eventId,media,expiresAt});}
+      finally{await release();}
+    })().finally(()=>this.loading.delete(id));
     this.loading.set(id,operation);return operation;
   }
   async download({id,eventId,media,expiresAt}){
@@ -67,6 +81,8 @@ export class IncomingFileStore {
     }catch(error){if(error.code!=='ENOENT')throw error;}
     if((await readdir(this.root)).filter(name=>ID.test(name)&&name!==id).length>=this.maxSessions)
       throw failure('incoming_media_capacity');
+    // 另一个进程可能已清理过期目录，本进程的旧下载凭证同时失效。
+    this.grants.delete(id);
     const declared=media.declaredLength;
     if(declared!==undefined&&(!Number.isSafeInteger(declared)||declared<1))throw failure('incoming_media_length_mismatch');
     const space=await statfs(this.root),reserved=[...this.loading.keys()].length*8*1024*1024;
@@ -110,6 +126,7 @@ export class IncomingFileStore {
         device:String(info.dev),inode:String(info.ino),mtimeMs:info.mtimeMs};
       await atomicJson(manifest,record);return await this.entry(id,record);
     }catch(error){
+      controller.abort();
       await rm(temporary,{force:true});
       if(/^incoming_media_[a-z_]+$/.test(error.code||''))throw error;
       if(error.code==='ENOSPC')throw failure('incoming_media_no_space');

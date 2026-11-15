@@ -11,6 +11,7 @@ import {IncomingFileStore,serveIncomingFile} from './incoming-file-store.mjs';
 import {MediaTransfers} from '../wechat-core-offline/media-transfer.mjs';
 import {cdnDownloadUrl,parseMediaKey,safeFilename} from '../wechat-core-offline/media-codec.mjs';
 
+const platformLock=process.platform==='win32'?async()=>async()=>{}:undefined;
 const key=Buffer.alloc(16,7),eventId='inbound-file-fixture';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 function encrypted(bytes){const cipher=createCipheriv('aes-128-ecb',key,null);return Buffer.concat([cipher.update(bytes),cipher.final()]);}
@@ -18,7 +19,7 @@ async function fixture(bytes=Buffer.from('录音文件测试'),options={}){
   const root=await mkdtemp(join(tmpdir(),'incoming-file-test-'));
   let calls=0,now=Date.now();
   const store=new IncomingFileStore({root,resolveUrl:cdnDownloadUrl,parseKey:parseMediaKey,safeFilename,
-    origin:'https://files.example.com',headroom:0,clock:()=>now,
+    origin:'https://files.example.com',headroom:0,clock:()=>now,acquireLock:platformLock,
     fetcher:async()=>{calls++;return new Response(encrypted(bytes));},...options});
   const args={eventId,media:{mediaKind:'file',fileName:'fixture.m4a',param:'synthetic',aes_key:key.toString('base64'),declaredLength:bytes.length},expiresAt:now+3600000};
   return {root,store,args,calls:()=>calls,advance:value=>{now+=value},clock:()=>now,
@@ -69,9 +70,9 @@ test('解密失败不会发布文件，缓存到期后清理且重启可复用�
   try{
     await assert.rejects(()=>f.store.prepare({...f.args,media:{...f.args.media,aes_key:Buffer.alloc(16,8).toString('base64')}}),e=>e.code==='incoming_media_decrypt_failed');
     const entry=await f.store.prepare(f.args);
-    const restarted=new IncomingFileStore({root:f.root,resolveUrl:cdnDownloadUrl,parseKey:parseMediaKey,safeFilename,headroom:0,clock:f.clock,fetcher:async()=>{throw Error('不应重新下载');}});
+    const restarted=new IncomingFileStore({root:f.root,resolveUrl:cdnDownloadUrl,parseKey:parseMediaKey,safeFilename,headroom:0,clock:f.clock,acquireLock:platformLock,fetcher:async()=>{throw Error('不应重新下载');}});
     assert.equal((await restarted.prepare(f.args)).sha256,entry.sha256);restarted.close();
-    f.advance(900001);await f.store.cleanup();assert.deepEqual(await readdir(f.root),[]);
+    f.advance(900001);await f.store.cleanup();assert.deepEqual((await readdir(f.root)).filter(name=>/^[a-f0-9]{64}$/.test(name)),[]);
     await assert.rejects(()=>entry.readChunk(0,1),e=>e.code==='incoming_media_expired');
   }finally{await f.close();}
 });
@@ -114,4 +115,32 @@ test('已验证文件在磁盘被修改后停止交付',async()=>{
     const entry=await f.store.prepare(f.args);await writeFile(join(f.root,digest(eventId),'payload'),Buffer.from('changed'));
     await assert.rejects(()=>entry.readChunk(0,1),e=>e.code==='incoming_media_unavailable');
   }finally{await f.close();}
+});
+
+// 接收进程与桥进程分离，覆盖另一进程到期清理后的原事件恢复。
+test('另一进程清理缓存后重新下载会生成有效新凭证，旧内存凭证不复用',async()=>{
+ const f=await fixture();
+ const collector=new IncomingFileStore({root:f.root,clock:f.clock,acquireLock:platformLock});
+ try{
+  const first=await f.store.prepare(f.args),oldGrant=await first.download();
+  f.advance(900001);await collector.cleanup();
+  const next=await f.store.prepare(f.args),newGrant=await next.download();
+  assert.notEqual(newGrant.token,oldGrant.token);
+  const access=JSON.parse(await readFile(join(f.root,digest(eventId),'access.json'),'utf8'));
+  assert.equal(access.tokenHash,digest(newGrant.token));assert.equal(access.expiresAt,newGrant.expiresAt);
+ }finally{collector.close();await f.close();}
+});
+
+test('桥进程下载与接收进程清理使用同一跨进程锁',{skip:process.platform==='win32'},async()=>{
+ let release,entered;const waiting=new Promise(resolve=>{release=resolve}),began=new Promise(resolve=>{entered=resolve});
+ const f=await fixture();
+ const collector=new IncomingFileStore({root:f.root,clock:f.clock});
+ try{
+  const first=await f.store.prepare(f.args);await first.download();f.advance(900001);
+  f.store.fetcher=async()=>{entered();await waiting;return new Response(encrypted(Buffer.from('录音文件测试')));};
+  const operation=f.store.prepare(f.args);await began;
+  await collector.cleanup();
+  assert.ok((await readdir(f.root)).includes(digest(eventId)));
+  release();const result=await operation;assert.equal(result.size,Buffer.byteLength('录音文件测试'));
+ }finally{release();collector.close();await f.close();}
 });
