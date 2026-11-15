@@ -7,11 +7,14 @@ const DAY = 86400000, WINDOW = 600000;
 const idOk = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value);
 const hash = value => createHash('sha256').update(value, 'utf8').digest('hex');
 export function validateWatchPurpose(purpose = 'final', nextUpdateAt, now, expiresAt) {
-  if (!['final', 'progress'].includes(purpose)) throw new Error('Invalid reply purpose');
+  if (!['final', 'progress'].includes(purpose))
+    throw Object.assign(new Error('Invalid reply purpose'), {code: 'invalid_reply_purpose'});
   if (purpose === 'progress' && (!Number.isSafeInteger(nextUpdateAt) ||
       nextUpdateAt <= now || nextUpdateAt >= expiresAt))
-    throw new Error('Progress deadline must be within the original reference expiry');
-  if (purpose === 'final' && nextUpdateAt !== undefined) throw new Error('Final reply has no progress deadline');
+    throw Object.assign(new Error('Progress deadline must be within the original reference expiry'),
+      {code: 'invalid_progress_deadline'});
+  if (purpose === 'final' && nextUpdateAt !== undefined)
+    throw Object.assign(new Error('Final reply has no progress deadline'), {code: 'unexpected_final_deadline'});
 }
 function time(now) { if (!Number.isSafeInteger(now) || now < 0) throw new Error('Invalid clock'); }
 function authorized(s, actor) {
