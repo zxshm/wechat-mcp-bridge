@@ -19,4 +19,4 @@ for(const [preload,files] of [[true,protectedFiles],[false,localFiles]]){
   if(result.status!==0)process.exit(result.status||1);
 }
 const tunnel=spawnSync(process.execPath,[path.resolve(root,'../tunnel-safe-log/run-tests.mjs')],{cwd:root,stdio:'inherit'});
-process.exitCode=tunnel.status||0;
+process.exitCode=Number.isInteger(tunnel.status)?tunnel.status:1;
