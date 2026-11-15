@@ -1,0 +1,150 @@
+{
+  "duration": 556.9333333333334,
+  "voice": "longanlingxi_v3.1",
+  "scenes": [
+    {
+      "scene": 1,
+      "title": "让微信接上 Dot 的工作流",
+      "start": 0,
+      "duration": 34.333333333333336,
+      "captionCoverage": 1.0,
+      "audioSha256": "f0d14aa2d1dbcbb2ced1af80eb034af17adfc83fbba5c4eaf67104cfcf3e1a69"
+    },
+    {
+      "scene": 2,
+      "title": "在客户端提问，在微信查看",
+      "start": 34.333333333333336,
+      "duration": 28.966666666666665,
+      "captionCoverage": 1.0,
+      "audioSha256": "dc02ba3927393c7d5f81dabb8ed9ffd5ebdacd0893207369280d93edb45ee802"
+    },
+    {
+      "scene": 3,
+      "title": "自定义指令成为同步入口",
+      "start": 63.3,
+      "duration": 30.166666666666668,
+      "captionCoverage": 1.0,
+      "audioSha256": "de2d16b1f6c3a3d07acc44c93f4d376cabe9b9a7bca221a4d583721bdc1d02cd"
+    },
+    {
+      "scene": 4,
+      "title": "把一句要求写成完整执行流程",
+      "start": 93.46666666666667,
+      "duration": 36.1,
+      "captionCoverage": 1.0,
+      "audioSha256": "edde60156a32c87b22eac3789e831bb83ef18a67f9d125e4ea9226737348d75e"
+    },
+    {
+      "scene": 5,
+      "title": "自定义指令 + 固定同步程序",
+      "start": 129.56666666666666,
+      "duration": 31.366666666666667,
+      "captionCoverage": 1.0,
+      "audioSha256": "045cc1bf9838a0b376cfe45ac72dbd725cf5924eb900e54c7d36873b0ba2bde6"
+    },
+    {
+      "scene": 6,
+      "title": "临时缓存丢失后，自动重建上下文",
+      "start": 160.93333333333334,
+      "duration": 32.8,
+      "captionCoverage": 1.0,
+      "audioSha256": "c0b1e9e68d42f5cd06881871a997a79a6fcf2ea610f2abb1c8b9d6290cccf15f"
+    },
+    {
+      "scene": 7,
+      "title": "换设备，延续同一个小弟",
+      "start": 193.73333333333335,
+      "duration": 28.266666666666666,
+      "captionCoverage": 1.0,
+      "audioSha256": "3aded384210635626e0225a91874019d205b626a097bbe9b7fb8b74d3ca85b61"
+    },
+    {
+      "scene": 8,
+      "title": "来信、回复和客户端镜像连成一轮",
+      "start": 222.0,
+      "duration": 30.733333333333334,
+      "captionCoverage": 1.0,
+      "audioSha256": "bc4b0b5bae3d6630553b91a7c8575f69e804aa1e5d5d005ad2a2f6f8c09b4e36"
+    },
+    {
+      "scene": 9,
+      "title": "文字之外，把实际资料交给 Dot",
+      "start": 252.73333333333335,
+      "duration": 27.6,
+      "captionCoverage": 1.0,
+      "audioSha256": "145825d722c40982c33bae4271ac305fe79b8f5a00235b2372033f2b8d846ada"
+    },
+    {
+      "scene": 10,
+      "title": "云端 → Minihome → 微信",
+      "start": 280.33333333333337,
+      "duration": 35.36666666666667,
+      "captionCoverage": 1.0,
+      "audioSha256": "16e6e7d413ef41f67e0d258b62b22de06fbdbea500c75ee3f40db4362c044a34"
+    },
+    {
+      "scene": 11,
+      "title": "分段传输，完整文件交付",
+      "start": 315.70000000000005,
+      "duration": 31.133333333333333,
+      "captionCoverage": 1.0,
+      "audioSha256": "b88d0ee2af71c4fbd9e0a88f81a4cec23aca24007ac09267b34bfac582e42a02"
+    },
+    {
+      "scene": 12,
+      "title": "连接中断，接着已落盘的位置传",
+      "start": 346.83333333333337,
+      "duration": 27.533333333333335,
+      "captionCoverage": 1.0,
+      "audioSha256": "d3d4bd233c49b089b6ba0516fee90df539f84ef465ae7ba15c51cf3fac69f957"
+    },
+    {
+      "scene": 13,
+      "title": "100,002,422 字节 PDF 已打通",
+      "start": 374.36666666666673,
+      "duration": 32.1,
+      "captionCoverage": 1.0,
+      "audioSha256": "81cf9a2531ba923e5ff1f06bd5a0c64646a167a2e4c99f6bc38488ca90c7ae76"
+    },
+    {
+      "scene": 14,
+      "title": "先拆开计时，再改动流程",
+      "start": 406.46666666666675,
+      "duration": 28.666666666666668,
+      "captionCoverage": 1.0,
+      "audioSha256": "40f320e6b6c025bd632c7bb9f544ea913887fecd9f9f5014ed2c0e647deedeb1"
+    },
+    {
+      "scene": 15,
+      "title": "减少重复准备，合并服务端核验",
+      "start": 435.13333333333344,
+      "duration": 30.9,
+      "captionCoverage": 1.0,
+      "audioSha256": "b14eb674dd5805288a355bc130a4fca6bca31e0a0f74cb4be448d651d12cd432"
+    },
+    {
+      "scene": 16,
+      "title": "连续问答整轮约 20.82 秒",
+      "start": 466.0333333333334,
+      "duration": 30.0,
+      "captionCoverage": 1.0,
+      "audioSha256": "ede463da495fc59df60e6637a5d4a67855a4f49e5452f521af534ec84053fa03"
+    },
+    {
+      "scene": 17,
+      "title": "一台 Linux 主机，接上原聊天",
+      "start": 496.0333333333334,
+      "duration": 32.8,
+      "captionCoverage": 1.0,
+      "audioSha256": "4601b91cd2d2a6690acedfab7f91eaa198c90927210f00d1616eebe7e919a4ec"
+    },
+    {
+      "scene": 18,
+      "title": "把聊天、任务与结果连起来",
+      "start": 528.8333333333334,
+      "duration": 28.1,
+      "captionCoverage": 1.0,
+      "audioSha256": "040f31c06bec47480073c1566205984c02841529be2407b0762cedda2336db19"
+    }
+  ]
+}

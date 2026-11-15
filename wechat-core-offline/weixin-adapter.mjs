@@ -1,5 +1,6 @@
 // Request/normalization only. No requests are sent by this module.
 import {randomBytes} from 'node:crypto';
+import {extractQuotedContext} from './quoted-context.mjs';
 const ORIGIN='https://ilinkai.weixin.qq.com';
 function headers(token){return {'Content-Type':'application/json',AuthorizationType:'ilink_bot_token','X-WECHAT-UIN':Buffer.from(String(randomBytes(4).readUInt32BE())).toString('base64'),'iLink-App-Id':'bot','iLink-App-ClientVersion':String((2<<16)|(4<<8)|10),...(token?{Authorization:'Bearer '+token}:{})};}
 const baseInfo={channel_version:'2.4.10',bot_agent:'XiaodiWeixinBridge/0.1.0'};
@@ -10,8 +11,11 @@ export function normalizeWire(raw,{allowedSender,accountScope,armedAt}={}){
  if(!str(allowedSender)||!str(accountScope)||!Number.isSafeInteger(armedAt))throw new Error('Explicit scope required');
  if(!raw||raw.from_user_id!==allowedSender||raw.to_user_id!==accountScope||(raw.group_id!==undefined&&raw.group_id!==null&&raw.group_id!=='')||raw.message_type!==1||raw.message_state!==2||!str(raw.message_id)||!str(raw.context_token)||!Number.isSafeInteger(raw.create_time_ms)||raw.create_time_ms<=armedAt)return null;
  if(!Array.isArray(raw.item_list)||raw.item_list.length===0)return null;
- const items=[];for(const i of raw.item_list){if(!i||i.type!==1||!i.text_item||typeof i.text_item.text!=='string'||i.voice_item||i.image_item||i.file_item||i.video_item||i.ref_msg||i.tool_call_start_item||i.tool_call_result_item||Object.keys(i.text_item).some(k=>k!=='text'))return null;items.push({type:1,text_item:{text:i.text_item.text}});}
- return {chatKind:'direct',textOrigin:'typed',group_id:'',from_user_id:raw.from_user_id,message_type:1,message_state:2,message_id:raw.message_id,context_token:raw.context_token,create_time_ms:raw.create_time_ms,item_list:items};
+ // ref_msg is projected separately as untrusted context, never merged into
+ // the owner's new text or used as a reply identity or attachment to ingest.
+ const items=[];for(const i of raw.item_list){if(!i||i.type!==1||!i.text_item||typeof i.text_item.text!=='string'||i.voice_item||i.image_item||i.file_item||i.video_item||i.tool_call_start_item||i.tool_call_result_item||Object.keys(i.text_item).some(k=>k!=='text'))return null;items.push({type:1,text_item:{text:i.text_item.text}});}
+ const quotedContext=extractQuotedContext(raw.item_list,accountScope,raw.create_time_ms);
+ return {...(quotedContext?{quotedContext}:{}),chatKind:'direct',textOrigin:'typed',group_id:'',from_user_id:raw.from_user_id,message_type:1,message_state:2,message_id:raw.message_id,context_token:raw.context_token,create_time_ms:raw.create_time_ms,item_list:items};
 }
 export function updatesRequest({token,cursor,bootstrap=false}){
  if(!str(token)||typeof cursor!=='string'||(!bootstrap&&!cursor))throw new Error('Bound session and cursor required');

@@ -1,4 +1,5 @@
-import fs from 'node:fs';import crypto from 'node:crypto';import path from 'node:path';
+import {privatePath,stateDirectory,largeMediaPaths} from './config.mjs';
+import fs from 'node:fs';import crypto from 'node:crypto';
 const REPLY_STAGES=new Set(['reply_network_failure','reply_http_failure','reply_response_failure','reply_local_failure','reply_upstream_rejected','reply_store_failure','reply_upstream_success']);
 const ALLOWED=new Set(['event_received','outbox_ack','read_start','send_start','upstream_ack',...REPLY_STAGES]);
 const UPSTREAM_CATEGORIES=new Set(['upstream_rate_limited','upstream_prepare_failed','upstream_other']);
@@ -16,4 +17,4 @@ export function createTimingLog(file,{clock=Date.now}={}){
  const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
  return {mark(id,stage){if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(id)||!ALLOWED.has(stage)||REPLY_STAGES.has(stage))return false;const at=clock();if(!Number.isSafeInteger(at))return false;return update({id_hash:hash(id),stage,at})},markReply(id,key,stage,detail={}){if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(id)||typeof key!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(key)||!REPLY_STAGES.has(stage))return false;const at=clock();if(!Number.isSafeInteger(at))return false;return update({id_hash:hash(id),key_hash:hash(key),stage,at,httpStatus:detail.httpStatus,ret:detail.ret,errcode:detail.errcode,hasServerMessageId:detail.hasServerMessageId,upstreamCategory:detail.upstreamCategory})},purge(){return update(null)}};
 }
-export const timing=process.env.BRIDGE_STATE_DIR?createTimingLog(path.join(process.env.BRIDGE_STATE_DIR,'timing.ndjson')):{mark:()=>false,markReply:()=>false,purge:()=>false};
+export const timing=createTimingLog(privatePath('timing.ndjson'));

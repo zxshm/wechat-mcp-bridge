@@ -1,6 +1,9 @@
-import {mkdir,lstat} from 'node:fs/promises';import path from 'node:path';import {stateDirectory} from '../wechat-core-offline/config.mjs';import {initEventsStore} from '../wechat-core-offline/private-init.mjs';import {BridgeModel} from '../wechat-core-offline/bridge-model-live.mjs';import {acquireBridgeLock} from './wechat-single-writer.mjs';
-export async function openPrivateBridge(owner,{root=path.join(stateDirectory(),'wechat-session'),init=initEventsStore}={}){
- if(typeof owner!=='string'||!owner||typeof root!=='string'||path.resolve(root)!==path.join(stateDirectory(),'wechat-session'))throw Object.assign(new Error('Private bridge unavailable'),{code:'session_store_unavailable'});
+import {isAbsolute} from 'node:path';
+import {privatePath,stateDirectory,largeMediaPaths} from '../wechat-core-offline/config.mjs';
+import {mkdir,lstat} from 'node:fs/promises';import {initEventsStore} from '../wechat-core-offline/private-init.mjs';import {BridgeModel} from '../wechat-core-offline/bridge-model-live.mjs';import {acquireBridgeLock} from './wechat-single-writer.mjs';
+const DEFAULT_ROOT=privatePath('wechat-session');
+export async function openPrivateBridge(owner,{root=DEFAULT_ROOT,init=initEventsStore}={}){
+ if(typeof owner!=='string'||!owner||typeof root!=='string'||!isAbsolute(root))throw Object.assign(new Error('Private bridge unavailable'),{code:'session_store_unavailable'});
  try{await mkdir(root,{mode:0o700})}catch(e){if(e.code!=='EEXIST')throw Object.assign(new Error('Private bridge unavailable'),{code:'session_store_unavailable'})}
  const st=await lstat(root);if(!st.isDirectory()||st.isSymbolicLink()||(st.mode&0o077)!==0||(process.getuid&&st.uid!==process.getuid()))throw Object.assign(new Error('Private bridge unavailable'),{code:'session_store_unavailable'});
  const release=await acquireBridgeLock(root);let store;

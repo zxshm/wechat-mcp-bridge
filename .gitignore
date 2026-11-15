@@ -7,3 +7,11 @@ node_modules/
 .DS_Store
 coverage/
 state/
+video/**/audio/
+video/**/frames/
+video/**/clips/
+video/**/*.mp4
+video/**/*.wav
+video/**/*.mp3
+video/**/*.jpg
+publication-*.tar

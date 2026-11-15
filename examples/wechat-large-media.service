@@ -1,0 +1,17 @@
+[Unit]
+Description=WeChat binary file receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/wechat-mcp/bridge.env
+WorkingDirectory=%h/src/wechat-mcp
+ExecStart=/usr/bin/node large-media/large-media-daemon.mjs ${BRIDGE_LARGE_MEDIA_ROOT} ${BRIDGE_LARGE_MEDIA_RUNTIME_DIR}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

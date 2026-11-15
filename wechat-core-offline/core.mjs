@@ -1,5 +1,6 @@
 // Offline pure logic adapted from the prior Windows bridge; no I/O or network.
 import { createHash } from 'node:crypto';
+import {validQuotedContext} from './quoted-context.mjs';
 const MAX_TEXT = 2000;
 const safeId = value => typeof value === 'string' && value.length > 0;
 const nonempty = value => value !== undefined && value !== null && value !== '';
@@ -27,8 +28,9 @@ function normalize(message,state) {
   text.push(t.text);
  }
  const joined=text.join('\n'); if (!joined.length || joined.length > MAX_TEXT) return null;
+ if(message.quotedContext!==undefined&&!validQuotedContext(message.quotedContext))return null;
  const messageId=hashId(state.accountScope,message.message_id);
- return {event:{eventId:'weixin_'+messageId,name:'weixin.owner_text',timestamp:new Date(message.create_time_ms).toISOString(),data:{conversation_id:'weixin-self',message_id:messageId,text:joined,simulation:false}},context:{to_user_id:state.allowFrom[0],context_token:message.context_token,source_message_id:message.message_id,accountScope:state.accountScope}};
+ return {event:{eventId:'weixin_'+messageId,name:'weixin.owner_text',timestamp:new Date(message.create_time_ms).toISOString(),data:{conversation_id:'weixin-self',message_id:messageId,text:joined,simulation:false,...(message.quotedContext?{quoted_context:structuredClone(message.quotedContext)}:{})}},context:{to_user_id:state.allowFrom[0],context_token:message.context_token,source_message_id:message.message_id,accountScope:state.accountScope}};
 }
 export function acceptBatch(state,actor,batch) {
  owner(state,actor);

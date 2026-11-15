@@ -2,8 +2,7 @@ import net from 'node:net';
 import ipaddr from 'ipaddr.js';
 
 const failure=(code='socks_error')=>Object.assign(new Error('SOCKS connection failed'),{code});
-// Direct connections are the default; an explicitly configured SOCKS proxy
-// receives only an already resolved and validated public IP address.
+// 默认直连，显式配置的 SOCKS 代理只接收已验证的公网地址。
 export async function connectPinnedSocks(address,{signal,proxyHost=process.env.BRIDGE_SOCKS_HOST,proxyPort=Number(process.env.BRIDGE_SOCKS_PORT||1080),onStage=()=>{}}={}){
   const family=net.isIP(address); if(!family||ipaddr.parse(address).range()!=='unicast') throw failure();
   if(!proxyHost){if(signal?.aborted)throw failure('socks_timeout');const socket=net.connect({host:address,port:443});return await new Promise((resolve,reject)=>{const cleanup=()=>{socket.off('connect',ok);socket.off('error',bad);signal?.removeEventListener('abort',abort)};const ok=()=>{cleanup();resolve(socket)},bad=()=>{cleanup();socket.destroy();reject(failure('socks_target_error'))},abort=()=>{cleanup();socket.destroy();reject(failure('socks_timeout'))};socket.once('connect',ok);socket.once('error',bad);signal?.addEventListener('abort',abort,{once:true});});}

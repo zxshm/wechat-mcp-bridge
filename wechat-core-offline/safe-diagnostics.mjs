@@ -1,4 +1,4 @@
-import path from 'node:path';
+import {privatePath,stateDirectory,largeMediaPaths} from './config.mjs';
 import {summarizeMetadata} from './mcp-metadata-summary.mjs';import {MCP_SERVER_VERSION} from './mcp-version.mjs';
 // Optional bounded protocol metadata only: never records headers, payloads, URLs, IDs or credentials.
 import {open,rename} from 'node:fs/promises';import {constants} from 'node:fs';
@@ -6,7 +6,7 @@ let diagnosticWriteFailures=0,diagnosticFailureWindow=0;
 function noteDiagnosticWriteFailure(){const now=Date.now();if(!diagnosticFailureWindow||now-diagnosticFailureWindow>=86400000){diagnosticFailureWindow=now;diagnosticWriteFailures=0;}diagnosticWriteFailures=Math.min(1000000,diagnosticWriteFailures+1);}
 export function getDiagnosticWriterHealth(){if(diagnosticFailureWindow&&Date.now()-diagnosticFailureWindow>=86400000){diagnosticFailureWindow=0;diagnosticWriteFailures=0;}return {writeFailures:diagnosticWriteFailures,windowMs:86400000};}
 export function createBoundedDiagnosticWriter(path,maxBytes=65536){let pending=Promise.resolve();return item=>{pending=pending.catch(()=>{}).then(async()=>{let f;try{const line=JSON.stringify(item)+'\n';if(Buffer.byteLength(line)>maxBytes){noteDiagnosticWriteFailure();return;}f=await open(path,constants.O_CREAT|constants.O_APPEND|constants.O_WRONLY|(constants.O_NOFOLLOW||0),0o600);const st=await f.stat();if(!st.isFile()||(st.mode&0o077)!==0){noteDiagnosticWriteFailure();return;}if(st.size+Buffer.byteLength(line)>maxBytes){await f.close();f=null;await rename(path,path+'.1');f=await open(path,constants.O_CREAT|constants.O_APPEND|constants.O_WRONLY|(constants.O_NOFOLLOW||0),0o600);const next=await f.stat();if(!next.isFile()||(next.mode&0o077)!==0){noteDiagnosticWriteFailure();return;}}await f.writeFile(line);}catch{noteDiagnosticWriteFailure();}finally{if(f)await f.close().catch(()=>noteDiagnosticWriteFailure());}});return pending;};}
-const writeDiagnostic=process.env.BRIDGE_STATE_DIR?createBoundedDiagnosticWriter(path.join(process.env.BRIDGE_STATE_DIR,'mcp-diagnostics.ndjson')):async()=>{};
+const writeDiagnostic=createBoundedDiagnosticWriter(privatePath('mcp-diagnostics.ndjson'));
 const allowed=new Set(['initialize','server/discover','tools/list','tools/call','events/list','events/subscribe','events/unsubscribe']);
 export function recordRequest(res,method,protocol){
  if(process.env.XDW_MCP_DIAGNOSTICS!=='1')return;

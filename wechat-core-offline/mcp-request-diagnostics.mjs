@@ -1,9 +1,10 @@
+import {persistMcpTrace} from './request-trace-sink.mjs';
 import {AsyncLocalStorage} from 'node:async_hooks';
 
 const DAY=86400000,MAX_EVENTS=128,MAX_BYTES=65536,MAX_INSPECTIONS=8;
 const METHODS=new Set(['initialize','server/discover','tools/list','tools/call','events/list','events/subscribe','events/unsubscribe']);
-const TOOLS=new Set(['get_wechat_event','list_chatgpt_sync_queue','get_wechat_context_diagnostics','list_wechat_delivery_status','send_wechat_reply','send_wechat_media_upload','enqueue_chatgpt_sync_message','cancel_queued_sync_deliveries','resume_empty_chatgpt_sync','get_mcp_request_diagnostics']);
-const INSPECT_TOOLS=new Set(['get_wechat_event','list_chatgpt_sync_queue','get_wechat_context_diagnostics','list_wechat_delivery_status']);
+const TOOLS=new Set(['list_recent_wechat_conversation','minihome_prepare_verified_sync_submission','minihome_inspect_and_prepare_sync_submission','minihome_record_sync_source_result','get_sync_pause_status','get_wechat_event','list_chatgpt_sync_queue','get_wechat_context_diagnostics','list_wechat_delivery_status','send_wechat_reply','send_wechat_media_upload','enqueue_chatgpt_sync_message','cancel_queued_sync_deliveries','resume_empty_chatgpt_sync','get_mcp_request_diagnostics']);
+const INSPECT_TOOLS=new Set(['list_recent_wechat_conversation','minihome_prepare_verified_sync_submission','minihome_inspect_and_prepare_sync_submission','minihome_record_sync_source_result','get_sync_pause_status','enqueue_chatgpt_sync_message','get_mcp_request_diagnostics','get_wechat_event','list_chatgpt_sync_queue','get_wechat_context_diagnostics','list_wechat_delivery_status']);
 const STAGES=new Set(['received','authenticated','auth_rejected','auth_unavailable','dispatch','complete','sdk_error','dispatch_error','response_aborted','inspect_failed']);
 const ERROR_CLASSES=new Set(['encoding_failure','sdk_error','dispatch_error','response_aborted','inspect_limit','inspect_invalid','inspect_timeout','inspect_stream']);
 const CODES=new Set([-32700,-32600,-32601,-32602,-32603,-32015]);
@@ -26,7 +27,7 @@ export class McpRequestTracer {
   if(ERROR_CLASSES.has(input.errorClass))item.errorClass=input.errorClass;
   if(CODES.has(input.rpcCode))item.rpcCode=input.rpcCode;
   if(['success','tool_error','rpc_error','unknown'].includes(input.result))item.result=input.result;
-  this.events.push(item);if(this.events.length>this.maxEvents)this.events.splice(0,this.events.length-this.maxEvents);return true;
+  try{persistMcpTrace(item)}catch{}this.events.push(item);if(this.events.length>this.maxEvents)this.events.splice(0,this.events.length-this.maxEvents);return true;
  }
  snapshot(limit=32){if(!Number.isInteger(limit)||limit<1||limit>32)throw new Error('Invalid diagnostic limit');this.prune();return {retentionMs:this.ttlMs,maxEvents:this.maxEvents,events:this.events.slice(-limit).map(x=>({...x}))};}
  run(context,fn){if(!context||!idOk(context.requestId)||typeof fn!=='function')throw new Error('Invalid diagnostic context');return this.context.run({requestId:context.requestId,method:METHODS.has(context.method)?context.method:'other',tool:TOOLS.has(context.tool)?context.tool:'other',startedAt:this.clock()},fn);}

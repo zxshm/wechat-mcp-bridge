@@ -1,7 +1,8 @@
-import {open} from 'node:fs/promises';import {constants} from 'node:fs';import {spawn} from 'node:child_process';import path from 'node:path';import {stateDirectory} from '../wechat-core-offline/config.mjs';
+import {isAbsolute} from 'node:path';
+import {open} from 'node:fs/promises';import {constants} from 'node:fs';import {spawn} from 'node:child_process';
 const fail=()=>Object.assign(new Error('Private bridge unavailable'),{code:'session_lock_unavailable'});
 export async function acquireBridgeLock(root,{command='flock'}={}){
- if(typeof root!=='string'||path.resolve(root)!==path.join(stateDirectory(),'wechat-session'))throw fail();const lockPath=root+'.lock';let f;
+ if(typeof root!=='string'||!isAbsolute(root))throw fail();const lockPath=root+'.lock';let f;
  try{f=await open(lockPath,constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);const st=await f.stat();if(!st.isFile()||(st.mode&0o077)!==0||(process.getuid&&st.uid!==process.getuid()))throw fail();}catch{throw fail()}finally{await f?.close()}
  const worker="process.stdout.write('READY\\n');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));";
  const child=spawn(command,['-n','-x','--',lockPath,process.execPath,'-e',worker],{stdio:['pipe','pipe','ignore']});child.stdin.on('error',()=>{});let settled=false;
