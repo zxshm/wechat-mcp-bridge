@@ -1,3 +1,4 @@
+import {IncomingFileStore,serveIncomingFile} from './incoming-file-store.mjs';
 import http from 'node:http';
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {mkdir, readFile, readdir, rename, stat, statfs, writeFile} from 'node:fs/promises';
@@ -23,6 +24,7 @@ export async function createLargeMediaService({root, headroom=256*1024*1024, max
   if(!Number.isSafeInteger(progressIntervalMs)||progressIntervalMs<10||progressIntervalMs>60000) throw new Error('上传保活间隔无效');
   if(!Number.isSafeInteger(uploadIdleMs)||uploadIdleMs<10||uploadIdleMs>120000)throw new Error('收包空闲期限无效');
   await mkdir(root,{recursive:true,mode:0o700});
+  const incomingFiles=new IncomingFileStore({root:join(root,'incoming')});
   const busy=new Set(); let creating=false;
   const statePath=id=>join(root,id,'access.json');
   const readState=async id=>JSON.parse(await readFile(statePath(id),'utf8'));
@@ -81,6 +83,7 @@ export async function createLargeMediaService({root, headroom=256*1024*1024, max
   // 总收包上限三十分钟，另保留连接空闲超时和上传凭证有效期。
   const app=http.createServer({requestTimeout:1800000},async(req,res)=>{
     req.setTimeout(120000,()=>req.destroy());
+    if(await serveIncomingFile(req,res,{root:join(root,'incoming')}))return;
     if(req.method==='GET'&&req.url==='/healthz') return reply(res,200,{status:'ok',mode:'receive_only',active:busy.size});
     const match=/^\/uploads\/([a-f0-9]{32})(?:\/parts\/(\d+)|\/(finish))?$/.exec(req.url||'');
     if(!match) return reply(res,404,{error:'not_found'});
@@ -141,7 +144,7 @@ export async function createLargeMediaService({root, headroom=256*1024*1024, max
   async function cleanup() {
     if(creating||busy.size) return;
     creating=true;
-    try {return await cleanupExpiredMultipart({root});} finally {creating=false;}
+    try {const result=await cleanupExpiredMultipart({root});await incomingFiles.cleanup();return result;} finally {creating=false;}
   }
   return {app,control,cleanup};
 }

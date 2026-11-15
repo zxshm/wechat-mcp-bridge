@@ -1,8 +1,12 @@
 {
   "name": "wechat-mcp-large-media",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
-  "engines": {"node": ">=24"},
-  "dependencies": {"zod": "4.6.7"}
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
 }

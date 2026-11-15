@@ -6,11 +6,54 @@ const idOk=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,160}$/.test(x);
 export class MediaTransfers {
  constructor({owner,readIncoming,checkTarget,sendMedia,clock=Date.now,validate=validateImage,waitForNewContext=null,schedule=setTimeout,cancel=clearTimeout}){if(!owner||typeof readIncoming!=='function'||typeof checkTarget!=='function'||typeof sendMedia!=='function'||!(waitForNewContext===null||typeof waitForNewContext==='function')||typeof schedule!=='function'||typeof cancel!=='function')throw new Error('Invalid media service');Object.assign(this,{owner,readIncoming,checkTarget,sendMedia,clock,validate,waitForNewContext,schedule,cancel});this.incoming=new Map();this.loading=new Map();this.uploads=new Map();this.reserved=0;}
  check(actor){if(this.closed||!actor||actor!==this.owner)throw new Error('Owner required');this.purge();}
- purge(){const t=this.clock();for(const [id,x] of this.incoming)if(t>=x.expiresAt){x.bytes.fill(0);this.incoming.delete(id)}for(const [id,x] of this.uploads)if(t>=x.expiresAt&&!x.inFlight){if(x.wakeTimer!==undefined)this.cancel(x.wakeTimer);x.bytes.fill(0);this.reserved-=x.size;this.uploads.delete(id)}}
- async read(actor,{eventId,offset=0,expectedSha256=null}){this.check(actor);if(!idOk(eventId)||!Number.isSafeInteger(offset)||offset<0||!(expectedSha256===null||/^[a-f0-9]{64}$/.test(expectedSha256)))throw new Error('Invalid read');let entry=this.incoming.get(eventId);if(!entry){let loading=this.loading.get(eventId);if(!loading){if(this.loading.size>=MAX_DOWNLOADS)throw new Error('Media capacity reached');loading=(async()=>{const result=await this.readIncoming(actor,eventId);if(!result||!Buffer.isBuffer(result.bytes)||!result.bytes.length||result.bytes.length>MAX_MEDIA_BYTES||!Number.isSafeInteger(result.expiresAt)||this.closed||this.clock()>=result.expiresAt){result?.bytes?.fill?.(0);throw new Error('Media unavailable')}if([...this.incoming.values()].reduce((n,x)=>n+x.bytes.length,0)+result.bytes.length>MAX_TOTAL){result.bytes.fill(0);throw new Error('Media capacity reached')}const value={...result,sha256:hash(result.bytes),expiresAt:Math.min(result.expiresAt,this.clock()+MAX_AGE)};this.incoming.set(eventId,value);const timer=setTimeout(()=>this.purge(),Math.max(0,value.expiresAt-this.clock()));timer.unref?.();return value;})().finally(()=>this.loading.delete(eventId));this.loading.set(eventId,loading);}entry=await loading;}
-  if(this.clock()>=entry.expiresAt||offset>entry.bytes.length||(offset>0&&!expectedSha256)||(expectedSha256&&expectedSha256!==entry.sha256))throw new Error('Media unavailable');const chunk=entry.bytes.subarray(offset,Math.min(offset+CHUNK,entry.bytes.length)),nextOffset=offset+chunk.length;return {eventId,fileName:safeFilename(entry.fileName),mimeType:entry.mimeType,size:entry.bytes.length,sha256:entry.sha256,offset,nextOffset,eof:nextOffset===entry.bytes.length,dataBase64:chunk.toString('base64')};
+ purge(){const t=this.clock();for(const [id,x] of this.incoming)if(t>=x.expiresAt){x.bytes?.fill(0);this.incoming.delete(id)}for(const [id,x] of this.uploads)if(t>=x.expiresAt&&!x.inFlight){if(x.wakeTimer!==undefined)this.cancel(x.wakeTimer);x.bytes.fill(0);this.reserved-=x.size;this.uploads.delete(id)}}
+ async incomingEntry(actor,eventId){
+  this.check(actor);
+  if(!idOk(eventId))throw new Error('Invalid read');
+  const cached=this.incoming.get(eventId);if(cached)return cached;
+  let loading=this.loading.get(eventId);
+  if(!loading){
+   if(this.loading.size>=MAX_DOWNLOADS)throw Object.assign(new Error('Media capacity reached'),{code:'incoming_media_capacity'});
+   loading=(async()=>{
+    const result=await this.readIncoming(actor,eventId);
+    const disk=result?.storage==='disk',size=disk?result.size:result?.bytes?.length;
+    if(!result||!Number.isSafeInteger(size)||size<1||
+       (disk?typeof result.readChunk!=='function'||!/^[a-f0-9]{64}$/.test(result.sha256):!Buffer.isBuffer(result.bytes)||size>MAX_MEDIA_BYTES)||
+       !Number.isSafeInteger(result.expiresAt)||this.closed||this.clock()>=result.expiresAt){
+     result?.bytes?.fill?.(0);throw new Error('Media unavailable');
+    }
+    if(!disk&&[...this.incoming.values()].reduce((n,x)=>n+(x.bytes?.length||0),0)+size>MAX_TOTAL){
+     result.bytes.fill(0);throw new Error('Media capacity reached');
+    }
+    const value={...result,sha256:disk?result.sha256:hash(result.bytes),expiresAt:Math.min(result.expiresAt,this.clock()+MAX_AGE)};
+    this.incoming.set(eventId,value);
+    const timer=setTimeout(()=>this.purge(),Math.max(0,value.expiresAt-this.clock()));timer.unref?.();return value;
+   })().finally(()=>this.loading.delete(eventId));
+   this.loading.set(eventId,loading);
+  }
+  return loading;
  }
- async image(actor,{eventId}){await this.read(actor,{eventId});const entry=this.incoming.get(eventId);if(!entry||entry.bytes.length>4*1024*1024||!['image/png','image/jpeg','image/webp'].includes(entry.mimeType)||this.clock()>=entry.expiresAt)throw new Error('Image unavailable');return {type:'image',mimeType:entry.mimeType,data:entry.bytes.toString('base64')};}
+ async prepareDownload(actor,{eventId}){
+  const entry=await this.incomingEntry(actor,eventId);
+  if(typeof entry.download!=='function')throw Object.assign(new Error('Binary download unavailable'),{code:'incoming_media_endpoint_unavailable'});
+  const download=await entry.download();
+  if(!download)throw Object.assign(new Error('Binary download unavailable'),{code:'incoming_media_endpoint_unavailable'});
+  return {eventId,fileName:safeFilename(entry.fileName),mimeType:entry.mimeType,size:entry.size,sha256:entry.sha256,download};
+ }
+ async read(actor,{eventId,offset=0,expectedSha256=null}){
+  this.check(actor);
+  if(!Number.isSafeInteger(offset)||offset<0||!(expectedSha256===null||/^[a-f0-9]{64}$/.test(expectedSha256)))throw new Error('Invalid read');
+  const entry=await this.incomingEntry(actor,eventId),size=entry.bytes?.length??entry.size;
+  if(this.clock()>=entry.expiresAt||offset>size||(offset>0&&!expectedSha256)||(expectedSha256&&expectedSha256!==entry.sha256))throw new Error('Media unavailable');
+  const length=Math.min(CHUNK,size-offset);
+  const chunk=entry.bytes?entry.bytes.subarray(offset,offset+length):await entry.readChunk(offset,length);
+  if(!Buffer.isBuffer(chunk)||chunk.length!==length||this.clock()>=entry.expiresAt)throw new Error('Media unavailable');
+  const nextOffset=offset+chunk.length;
+  const download=offset===0&&entry.download?await entry.download():undefined;
+  return {eventId,fileName:safeFilename(entry.fileName),mimeType:entry.mimeType,size,sha256:entry.sha256,
+   offset,nextOffset,eof:nextOffset===size,dataBase64:chunk.toString('base64'),...(download?{download}:{})};
+ }
+ async image(actor,{eventId}){await this.read(actor,{eventId});const entry=this.incoming.get(eventId);if(!entry?.bytes||entry.bytes.length>4*1024*1024||!['image/png','image/jpeg','image/webp'].includes(entry.mimeType)||this.clock()>=entry.expiresAt)throw new Error('Image unavailable');return {type:'image',mimeType:entry.mimeType,data:entry.bytes.toString('base64')};}
  async begin(actor,{eventId,idempotencyKey,kind,fileName,size,sha256}){this.check(actor);if(!idOk(eventId)||!idOk(idempotencyKey)||!['image','file'].includes(kind)||!Number.isSafeInteger(size)||size<1||size>MAX_MEDIA_BYTES||!/^[a-f0-9]{64}$/.test(sha256))throw new Error('Invalid upload');const target=await this.checkTarget(actor,eventId);if(!Number.isSafeInteger(target?.expiresAt)||this.clock()>=target.expiresAt)throw new Error('Event unavailable');const uploadId=hash(JSON.stringify([actor,eventId,idempotencyKey]));const name=safeFilename(fileName),existing=this.uploads.get(uploadId);if(existing){if(existing.size!==size||existing.sha256!==sha256||existing.kind!==kind||existing.fileName!==name)throw new Error('Upload conflict');return {uploadId,nextOffset:existing.nextOffset,state:existing.state,expiresAt:existing.expiresAt};}if(this.uploads.size>=MAX_UPLOADS||this.reserved+size>MAX_TOTAL)throw new Error('Media capacity reached');const entry={actor,eventId,idempotencyKey,kind,fileName:name,size,sha256,bytes:Buffer.alloc(size),nextOffset:0,state:'uploading',expiresAt:Math.min(target.expiresAt,this.clock()+MAX_AGE)};this.reserved+=size;this.uploads.set(uploadId,entry);const timer=setTimeout(()=>this.purge(),Math.max(0,entry.expiresAt-this.clock()));timer.unref?.();return {uploadId,nextOffset:0,state:'uploading',expiresAt:entry.expiresAt};}
  append(actor,{uploadId,offset,dataBase64}){this.check(actor);const u=this.uploads.get(uploadId);if(!u||u.actor!==actor||u.state!=='uploading'||!Number.isSafeInteger(offset)||offset<0)throw new Error('Upload unavailable');const data=strictBase64(dataBase64);if(data.length>CHUNK||offset+data.length>u.size)throw new Error('Invalid chunk');if(offset<u.nextOffset){if(offset+data.length>u.nextOffset||!u.bytes.subarray(offset,offset+data.length).equals(data))throw new Error('Chunk conflict');return {uploadId,nextOffset:u.nextOffset};}if(offset!==u.nextOffset)throw new Error('Invalid offset');data.copy(u.bytes,offset);u.nextOffset+=data.length;return {uploadId,nextOffset:u.nextOffset};}
  async finish(actor,{uploadId}){this.check(actor);const u=this.uploads.get(uploadId);if(!u||u.actor!==actor)throw new Error('Upload unavailable');if(u.state==='ready')return {uploadId,state:'ready'};if(u.state!=='uploading'||u.nextOffset!==u.size||hash(u.bytes)!==u.sha256)throw new Error('Upload incomplete');if(u.kind==='image')await this.validate(u.bytes);if(this.clock()>=u.expiresAt)throw new Error('Upload expired');u.state='ready';return {uploadId,state:'ready'};}
@@ -30,5 +73,5 @@ export class MediaTransfers {
  }
  // 只检查是否出现不同的有效上下文；媒体缓存仍按原期限清理。
  scheduleResume(actor,uploadId){const u=this.uploads.get(uploadId);if(!u||u.wakeTimer!==undefined||!this.waitForNewContext||this.closed)return;const wake=async()=>{delete u.wakeTimer;if(this.closed||!this.uploads.has(uploadId)||u.state!=='ready')return;if(this.clock()>=u.expiresAt){this.purge();return;}if(u.inFlight){this.scheduleResume(actor,uploadId);return;}let available=false;try{available=!!(await this.waitForNewContext(actor,{eventId:u.waitFromEventId||u.eventId,idempotencyKey:u.idempotencyKey}));}catch{}if(!available){this.scheduleResume(actor,uploadId);return;}try{await this.send(actor,{uploadId});}catch{}};u.wakeTimer=this.schedule(wake,5000);u.wakeTimer?.unref?.();}
- close(){this.closed=true;for(const x of this.incoming.values())x.bytes.fill(0);this.incoming.clear();for(const [id,x] of this.uploads){if(x.wakeTimer!==undefined){this.cancel(x.wakeTimer);delete x.wakeTimer;}if(!x.inFlight){x.bytes.fill(0);this.reserved-=x.size;this.uploads.delete(id);}}}
+ close(){this.closed=true;for(const x of this.incoming.values())x.bytes?.fill(0);this.incoming.clear();for(const [id,x] of this.uploads){if(x.wakeTimer!==undefined){this.cancel(x.wakeTimer);delete x.wakeTimer;}if(!x.inFlight){x.bytes.fill(0);this.reserved-=x.size;this.uploads.delete(id);}}}
 }
