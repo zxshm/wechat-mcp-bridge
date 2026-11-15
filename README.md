@@ -106,7 +106,7 @@ node large-media/large-media-daemon.mjs "$BRIDGE_LARGE_MEDIA_ROOT" "${BRIDGE_LAR
 
 已实测 100,002,422 字节 PDF，以 90,000,000 与 10,002,422 字节两段上传，完整摘要一致，并以单个完整 PDF 首次发送成功。暂存按磁盘空间、并发和上传期限管理。
 
-入站普通文件使用 Linux 磁盘暂存与流式 AES 解密，按可用磁盘、并发和有效期准入。`prepare_wechat_file_download` 返回大小、SHA-256 和短期 HTTPS 下载凭证，云端可连续下载或使用 Range 续传。原 `read_wechat_media_chunk` 入口也能读取这些大文件，并在首块返回可用的 HTTPS 下载信息。
+入站普通文件使用 Linux 磁盘暂存与流式 AES 解密，按可用磁盘、并发和有效期准入。`prepare_wechat_file_download` 返回大小、SHA-256 和短期 HTTPS 下载凭证，云端可连续下载或使用 Range 续传。原 `read_wechat_media_chunk` 入口也能读取这些大文件，并在首块返回可用的 HTTPS 下载信息。 首块兼容调用显式传入 `offset: 0` 和 `expectedSha256: null`。下载后把校验过的文件交付当前对话模型，依据模型实际支持的附件能力处理。当前原聊天附件接口实测单文件上限为 20 MiB，较大的录音可在云端按时间无损分割为独立可播放片段后依序交付，完整原件保存在 Library。
 
 旧图片读取及兼容媒体发送仍采用最多 20 MiB 的内存流程，每块最多 128 KiB。静态 PNG、JPEG、WebP 会实际解码校验。这些参数属于旧媒体接口，大文件直传采用独立二进制入口。
 
