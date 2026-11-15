@@ -1,0 +1,9 @@
+# Replace all @PLACEHOLDERS@ in a private staging copy before installation.
+# Assumes the existing service uses Type=exec and KillMode=control-group.
+# Preserve the original executable and existing token-file reference.
+[Service]
+ExecStart=
+ExecStart="@NODE_EXECUTABLE@" "@RUNNER_PATH@" run "@LOG_DIRECTORY@" -- "@CLOUDFLARED_EXECUTABLE@" tunnel run --token-file "@EXISTING_TOKEN_FILE@"
+StandardOutput=null
+StandardError=null
+LimitCORE=0

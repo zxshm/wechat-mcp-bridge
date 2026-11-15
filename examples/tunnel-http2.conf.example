@@ -1,0 +1,4 @@
+# Optional protocol trial; install separately from the diagnostic wrapper.
+# Remove this drop-in to restore the prior protocol configuration.
+[Service]
+Environment="TUNNEL_TRANSPORT_PROTOCOL=http2"

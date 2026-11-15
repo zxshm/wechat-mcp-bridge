@@ -1,0 +1,12 @@
+[Unit]
+Description=Expire classified tunnel diagnostics independently of the tunnel
+
+[Timer]
+OnStartupSec=10s
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+Unit=tunnel-safe-clean.service
+
+[Install]
+WantedBy=timers.target
