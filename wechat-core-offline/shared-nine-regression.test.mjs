@@ -73,9 +73,9 @@ test('上下文顺序无法确定时，文字和媒体均在预留前停止',asy
  assert.equal(retainedContextReservations(bridge.state.queue,'e1',now+1).count,0);
 });
 
-test('出现新上下文后不能对旧上下文发起媒体上传预留',async()=>{
+test('出现新上下文后媒体首次预留路由至同一会话最新上下文',async()=>{
  const {bridge}=await make();add(bridge.state.queue,'new-event',now+5,'new-token');
- await assert.rejects(media(bridge,'e1',4,now+6),e=>e.code==='stale_context');
+ assert.equal((await media(bridge,'e1',4,now+6)).effectiveEventId,'new-event');
  assert.equal(retainedContextReservations(bridge.state.queue,'e1',now+6).count,0);
 });
 

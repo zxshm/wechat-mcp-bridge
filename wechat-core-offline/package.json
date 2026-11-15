@@ -15,6 +15,6 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test *.test.mjs ../wechat-live-stage/*.test.mjs minihome-source-ledger-candidate/*.test.mjs ../large-media/*.test.mjs ../examples/*.test.mjs"
+    "test": "node run-tests.mjs"
   }
 }
