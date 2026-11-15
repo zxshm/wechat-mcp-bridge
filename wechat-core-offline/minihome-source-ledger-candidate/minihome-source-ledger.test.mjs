@@ -14,7 +14,7 @@ test('本人鉴权后才挂载，重启不恢复首次资格且不保存正文',
  let store=createMinihomeSourceLedger({file,roomId:'room'});
  assert.throws(()=>store.register({server,z,ownerAuthenticated:false}),/auth_required/);
  store.register({server,z,ownerAuthenticated:true});
- assert.match(descriptions.get('minihome_prepare_verified_sync_submission'),/不包含旧 Windows 账本/);
+ assert.match(descriptions.get('minihome_prepare_verified_sync_submission'),/不包含其他账本或发送路径的记录/);
  const start=store.capabilities().enabledSince;
  const p={sourceId:'new_message',role:'assistant',sourceCreatedAt:start,sourceExpiresAt:start+86400000,sourceText:'仅用于测试的正文',eventId:'event'};
  const call=async(name,args)=>JSON.parse((await handlers.get('minihome_'+name)(args)).content[0].text);
